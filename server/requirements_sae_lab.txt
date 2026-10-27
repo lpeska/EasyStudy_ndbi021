@@ -1,0 +1,5 @@
+# Install after local_requirements.txt, Python 3.11 or 3.12
+# Note: verify the exact Compresso API against the installed version.
+torch>=2.3,<3
+elsarec==0.1.4
+compresso-pytorch==0.1.2
