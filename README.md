@@ -2,9 +2,9 @@
 
 This lab explores how a sparse representation of movies can be used to ask users about their preferences and generate personalized recommendations. The implementation runs inside **EasyStudy**, using its **FastCompare** plugin to administer a study and compare recommendation methods.
 
-**Source code:** https://github.com/lpeska/EasyStudy\_ndbi021/tree/ndbi021  
-**Poster images:** https://www.ksi.mff.cuni.cz/\~peska/vyuka/ndbi021/2026\_2027\_labs/labs2/
-**MovieLens dataset:** https://files.grouplens.org/datasets/movielens/ml-latest.zip
+- **Source code:** https://github.com/lpeska/EasyStudy\_ndbi021/tree/ndbi021  
+- **Poster images:** https://www.ksi.mff.cuni.cz/\~peska/vyuka/ndbi021/2026\_2027\_labs/labs2/
+- **MovieLens dataset:** https://files.grouplens.org/datasets/movielens/ml-latest.zip
 
 ## 1\. Installation
 
