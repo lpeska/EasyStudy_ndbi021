@@ -203,6 +203,20 @@ def join():
 # Callback once user has joined we forward to preference elicitation
 @bp.route("/on-joined", methods=["GET", "POST"])
 def on_joined():
+    conf = load_user_study_config(session['user_study_id'])
+    if conf['selected_preference_elicitation'] == 'SAE choice groups':
+        session['elicitation_movies'] = []
+        session['elicitation_selected_movies'] = []
+
+        session['sae_question_index'] = 0
+        session['sae_explicit'] = []
+        session['sae_implicit'] = []
+        session['sae_displayed'] = []
+        session['sae_liked'] = []
+        session['elicitation_movies'] = []
+        session['elicitation_selected_movies'] = []
+
+        return redirect(url_for(f'{__plugin_name__}.sae_choice'))
     return redirect(url_for(
         "utils.preference_elicitation",
         continuation_url=url_for(f"{__plugin_name__}.send_feedback"),
@@ -263,6 +277,57 @@ def prepare_recommendations(loader, conf, recommendations, selected_movies, filt
 
     return recommendations
 
+# SAE choice-based elicitation: session state belongs to the participant, never to
+# the shared fitted elicitation object. Form POSTs are CSRF-protected via Flask-WTF.
+@bp.route('/sae-choice', methods=['GET', 'POST'])
+def sae_choice():
+    from flask_wtf.csrf import validate_csrf, CSRFError, generate_csrf
+    from plugins.fastcompare.algo.sae_lab.adapter import SAEChoiceElicitation
+    from plugins.fastcompare.algo.sae_lab.core import update_preferences
+    conf = load_user_study_config(session['user_study_id'])
+    if conf['selected_preference_elicitation'] != SAEChoiceElicitation.name():
+        return make_response('Wrong elicitation method', 400)
+    loader_factory = load_data_loaders()[conf['selected_data_loader']]
+    loader = loader_factory(**filter_params(conf['data_loader_parameters'], loader_factory))
+    load_data_loader(loader, session['user_study_guid'], loader_factory.name())
+    el = SAEChoiceElicitation.__new__(SAEChoiceElicitation)
+    el.load(get_cache_path(session['user_study_guid'], SAEChoiceElicitation.name()), '')
+    idx = int(session.get('sae_question_index', 0))
+    if request.method == 'POST':
+        try:
+            validate_csrf(request.form.get('csrf_token', ''))
+        except CSRFError:
+            return make_response('Invalid CSRF token', 400)
+        if idx >= len(el.groups):
+            return redirect(url_for(f'{__plugin_name__}.send_feedback'))
+        response = request.form.get('response')
+        if response not in ('positive', 'negative', 'both', 'neither'):
+            return make_response('Invalid choice', 400)
+        dim, pos, neg, mass = el.groups[idx]
+        d = el.codes.shape[1]
+        exp = session.get('sae_explicit') or [0.] * d
+        imp = session.get('sae_implicit') or [0.] * d
+        exp, imp = update_preferences(exp, imp, el.codes, dim, pos, neg, response)
+        session['sae_explicit'], session['sae_implicit'] = exp.tolist(), imp.tolist()
+        session['sae_displayed'] = sorted(set(session.get('sae_displayed', [])) | set(pos) | set(neg))
+        # Translate group choices into positive item-level feedback for all
+        # standard FastCompare algorithms (including EASE).
+        liked = (list(pos) if response == 'positive' else
+                 list(neg) if response == 'negative' else
+                 list(pos) + list(neg) if response == 'both' else [])
+        session['sae_liked'] = sorted(set(session.get('sae_liked', [])) | set(liked))
+        log_interaction(session['participation_id'], 'sae-choice',
+                        question=idx, dimension=int(dim), positive=pos,
+                        negative=neg, response=response, mass=mass)
+        session['sae_question_index'] = idx + 1
+        return redirect(url_for(f'{__plugin_name__}.sae_choice'))
+    if idx >= len(el.groups):
+        return redirect(url_for(f'{__plugin_name__}.send_feedback'))
+    dim, pos, neg, mass = el.groups[idx]
+    return render_template('sae_choice.html', question=idx+1, total=len(el.groups),
+        positive=enrich_results(pos, loader), negative=enrich_results(neg, loader),
+        csrf_token=generate_csrf())
+
 # Receives arbitrary feedback (CALLED from preference elicitation) and generates recommendation
 @bp.route("/send-feedback", methods=["GET"])
 def send_feedback():
@@ -275,6 +340,10 @@ def send_feedback():
     selected_movies = request.args.get("selectedMovies")
     selected_movies = selected_movies.split(",") if selected_movies else []
     selected_movies = [int(m) for m in selected_movies]
+    # SAE choices use a custom form rather than the standard selectedMovies
+    # query parameter. Feed liked group members into the shared history.
+    if conf['selected_preference_elicitation'] == 'SAE choice groups':
+        selected_movies = sorted(set(selected_movies) | set(session.get('sae_liked', [])))
 
     # Add default entries so that even the non-chosen algorithm has an empty entry
     # to unify later access
@@ -598,6 +667,16 @@ def long_initialization(guid):
             **filter_params(conf["preference_elicitation_parameters"], elicitation_factory)
         )
         elicitation.fit()
+        if elicitation.name() == 'SAE choice groups':
+            from plugins.fastcompare.algo.sae_lab.export import export_sae_artifacts
+
+            export_sae_artifacts(
+                loader,
+                elicitation.codes,
+                elicitation.popularity,
+                Path(get_cache_path(guid)) / 'sae_artifacts',
+                variant=elicitation.variant,
+            )
         elicitation.save(get_cache_path(guid, elicitation.name()), get_cache_path("", elicitation.name()))
 
         # Prepare algorithms
