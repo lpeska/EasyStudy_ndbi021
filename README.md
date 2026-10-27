@@ -64,7 +64,7 @@ From `server/`, run:
 flask --debug run
 ```
 
-If your environment needs database initialization or additional environment variables, follow the original repository's setup instructions. Open the local address printed by Flask (/administration).
+If your environment needs database initialization or additional environment variables, follow the original repository's setup instructions. Open the local address printed by Flask (typically http://127.0.0.1:5000/administration).
 
 ## 2\. Create and run a study
 
