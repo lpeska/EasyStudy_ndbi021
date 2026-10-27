@@ -34,8 +34,8 @@ Create a dedicated environment:
 conda create -n easystudy-sae python=3.11 -y
 conda activate easystudy-sae
 cd server
-python -m pip install -r local\_requirements.txt
-python -m pip install -r requirements\_sae\_lab.txt
+python -m pip install -r local_requirements.txt
+python -m pip install -r requirements_sae_lab.txt
 python -m pip install jupyter ipykernel numpy pandas
 python -m ipykernel install --user --name easystudy-sae --display-name "EasyStudy SAE"
 ```
